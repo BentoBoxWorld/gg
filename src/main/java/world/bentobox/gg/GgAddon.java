@@ -1,20 +1,24 @@
 package world.bentobox.gg;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedDeque;
+
 import org.bukkit.Bukkit;
 import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
+
 import world.bentobox.bentobox.api.addons.Addon;
 
-
-import java.time.LocalDate;
-import java.util.*;
-import java.util.concurrent.ConcurrentLinkedDeque;
-
-public class ggAddon extends Addon implements Listener {
+public class GgAddon extends Addon implements Listener {
     private Deque<ChatLine> chatBuffer;
     private List<Challenge> challenges;
     private ChatGPTService gpt;
@@ -43,11 +47,11 @@ public class ggAddon extends Addon implements Listener {
             });
 
         // Register chat listener
-        getServer().getPluginManager().registerEvents(this, this);
+        this.registerListener(this);
 
         // Schedule polling task
         pollingTask = Bukkit.getScheduler().runTaskTimerAsynchronously(
-            this,
+                getPlugin(),
             this::checkChallenges,
             interval * 20L,  // delay
             interval * 20L   // period

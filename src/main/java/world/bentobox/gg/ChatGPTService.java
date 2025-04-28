@@ -1,9 +1,15 @@
 package world.bentobox.gg;
-import com.fasterxml.jackson.databind.*;
-import okhttp3.*;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.runner.Request;
+
+import com.fasterxml.jackson.databind.*;
+
+import okhttp3.*;
 
 public class ChatGPTService {
     private static final String URL = "https://api.openai.com/v1/chat/completions";
