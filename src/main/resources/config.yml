@@ -1,0 +1,28 @@
+# src/main/resources/config.yml
+# How often (in seconds) we poll ChatGPT for new challenge completions
+poll-interval: 60
+
+# How many of the most recent chat messages to send
+window-size: 100
+
+# Your OpenAI API key
+openai-api-key: “your-secret-key-here”
+
+# Define each challenge:
+#  id: unique string
+#  prompt: the check you want ChatGPT to run on the chat window
+#  commands: list of Bukkit commands to run; use %player% to insert the winner’s name
+challenges:
+  greet:
+    prompt: "detect when a player says 'hello' or 'hi' to another player"
+    commands:
+      - "give %player% diamond 1"
+  thanks:
+    prompt: "detect 'thanks <player>' or 'thank you <player>' in global chat"
+    commands:
+      - "eco give %player% 50"
+  quickreply:
+    prompt: "detect when a player replies to a private message with '/r ' within 30 seconds"
+    commands:
+      - "msg %player% Congrats on quick reply!"
+# …add as many as you like
