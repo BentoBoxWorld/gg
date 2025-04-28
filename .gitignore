@@ -25,3 +25,5 @@ replay_pid*
 /target/
 /.classpath
 /.project
+/.DS_Store
+/dependency-reduced-pom.xml

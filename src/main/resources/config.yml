@@ -18,11 +18,19 @@ challenges:
     commands:
       - "give %player% diamond 1"
   thanks:
-    prompt: "detect 'thanks <player>' or 'thank you <player>' in global chat"
+    prompt: "detect 'thanks', 'thanks <player>' or 'thank you <player>' in global chat"
     commands:
       - "eco give %player% 50"
-  quickreply:
-    prompt: "detect when a player replies to a private message with '/r ' within 30 seconds"
+  warpinvite:
+    prompt: "detect when a player invites others to warp to their island"
     commands:
-      - "msg %player% Congrats on quick reply!"
+      - "msg %player% Congrats on inviting others to your island!"
+  helpful:
+    prompt: "detect when a player says 'gg' or 'congrats'"
+    commands:
+      - "give %player% emerald 1"
+  question:
+    prompt: "detect that a player has asked a question to get help from the community"
+    commands:
+      - "msg %player% Good job asking the community. If you get an answer, don't forget to say thanks!"
 # …add as many as you like

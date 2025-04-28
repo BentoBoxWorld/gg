@@ -33,9 +33,13 @@ public class GgAddon extends Addon implements Listener {
 
         // Load config
         int interval = getConfig().getInt("poll-interval", 60);
-        int window  = getConfig().getInt("window-size", 100);
         String key  = getConfig().getString("openai-api-key");
-        gpt = new ChatGPTService(key);
+        if (key.equals("your-secret-key-here")) {
+            this.logError("Set the ChatGPT key in config.yml and then restart the server!");
+            this.setState(State.DISABLED);
+            return;
+        }
+        gpt = new ChatGPTService(this, key);
 
         // Load challenges
         challenges = new ArrayList<>();
@@ -79,12 +83,12 @@ public class GgAddon extends Addon implements Listener {
         List<ChatLine> window = new ArrayList<>(chatBuffer);
 
         // build payload
-        Map<String,Object> payload = new HashMap<>();
+        Map<String, Object> payload = new HashMap<>();
         payload.put("chat", window);
         payload.put("challenges", challenges);
 
         // ask ChatGPT
-        Map<String,List<String>> results = gpt.evaluateChallenges(payload);
+        Map<String, List<String>> results = gpt.evaluateChallenges(payload);
         // results: map<challengeId, list of player names>
 
         ConsoleCommandSender console = getServer().getConsoleSender();
@@ -97,9 +101,11 @@ public class GgAddon extends Addon implements Listener {
             if (c == null) return;
 
             for (String playerName : winners) {
-                Bukkit.getPlayerExact(playerName).getUniqueId(); // lookup UUID if needed
-                // only once per day
-                UUID uuid = Bukkit.getOfflinePlayer(playerName).getUniqueId();
+                UUID uuid = this.getPlayers().getUUID(playerName);
+                if (uuid == null) {
+                    this.logError("Player not found: " + playerName);
+                    continue;
+                }
                 completedToday.putIfAbsent(uuid, new HashMap<>());
                 Map<String, LocalDate> doneMap = completedToday.get(uuid);
                 if (doneMap.getOrDefault(id, LocalDate.MIN).isEqual(today)) continue;
