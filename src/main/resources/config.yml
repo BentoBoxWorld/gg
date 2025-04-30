@@ -1,4 +1,4 @@
-# src/main/resources/config.yml
+# gg config file {$version}
 # How often (in seconds) we poll ChatGPT for new challenge completions
 poll-interval: 60
 
@@ -14,21 +14,53 @@ openai-api-key: your-secret-key-here
 #  commands: list of Bukkit commands to run; use %player% to insert the winner’s name
 challenges:
   greet:
-    prompt: "detect when a player says 'hello' or 'hi' to another player"
+    prompt: "detect when a player sends a greeting in any language"
     commands:
       - "give %player% diamond 1"
+      - "msg %player% Thanks for saying hi!"
+  goodbye:
+    prompt: "detect when a player says goodbye in any language"
+    commands:
+      - "give %player% emerald 1"
+      - "msg %player% Thanks for saying goodbye!"
+  help:
+    prompt: "detect when a player asks for help in any language"
+    commands:
+      - "give %player% diamond 1"
+      - "msg %player% Thanks for asking for help!"
+  welcome:
+    prompt: "detect when a player welcomes another player in any language"
+    commands:
+      - "give %player% diamond 1"
+      - "msg %player% Thanks for welcoming others!"
+  congrats:
+    prompt: "detect when a player congratulates another player in any language"
+    commands:
+      - "give %player% diamond 1"
+      - "msg %player% Thanks for congratulating others!"
+  goodluck: 
+    prompt: "detect when a player wishes another player good luck in any language"
+    commands:
+      - "give %player% emerald 1"
+      - "msg %player% Thanks for wishing others good luck!"
+  goodgame:
+    prompt: "detect when a player says 'gg' or 'good game' in any language"
+    commands:
+      - "give %player% oak_sign 1"
+      - "msg %player% Thanks for saying good game!"
+  goodjob:  
+    prompt: "detect when a player says 'good job' in any language"
+    commands:
+      - "give %player% diampaperond 1"
+      - "msg %player% Thanks for saying good job!"
   thanks:
-    prompt: "detect 'thanks', 'thanks <player>' or 'thank you <player>' in global chat"
+    prompt: "detect when a player says 'thanks' in any language"
     commands:
       - "eco give %player% 50"
   warpinvite:
     prompt: "detect when a player invites others to warp to their island"
     commands:
       - "msg %player% Congrats on inviting others to your island!"
-  helpful:
-    prompt: "detect when a player says 'gg' or 'congrats'"
-    commands:
-      - "give %player% emerald 1"
   question:
     prompt: "detect that a player has asked a question to get help from the community"
     commands:
