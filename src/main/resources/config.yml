@@ -6,7 +6,7 @@ poll-interval: 60
 window-size: 100
 
 # Your OpenAI API key
-openai-api-key: “your-secret-key-here”
+openai-api-key: your-secret-key-here
 
 # Define each challenge:
 #  id: unique string

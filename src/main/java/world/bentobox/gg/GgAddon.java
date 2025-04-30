@@ -17,6 +17,8 @@ import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.scheduler.BukkitTask;
 
 import world.bentobox.bentobox.api.addons.Addon;
+import world.bentobox.bentobox.api.user.User;
+import world.bentobox.bentobox.util.Util;
 
 public class GgAddon extends Addon implements Listener {
     private Deque<ChatLine> chatBuffer;
@@ -24,6 +26,7 @@ public class GgAddon extends Addon implements Listener {
     private ChatGPTService gpt;
     private BukkitTask pollingTask;
     private Map<UUID, Map<String, LocalDate>> completedToday;
+    private boolean checking;
 
     @Override
     public void onEnable() {
@@ -69,6 +72,11 @@ public class GgAddon extends Addon implements Listener {
 
     @EventHandler
     public void onPlayerChat(AsyncPlayerChatEvent e) {
+        // Check if there are any players online that the player can see
+        User user = User.getInstance(e.getPlayer());
+        if (Util.getOnlinePlayerList(user).isEmpty()) {
+            return;
+        }
         // keep only last N
         chatBuffer.addLast(new ChatLine(e.getPlayer().getUniqueId(), e.getPlayer().getName(), e.getMessage()));
         while (chatBuffer.size() > getConfig().getInt("window-size", 100)) {
@@ -77,7 +85,10 @@ public class GgAddon extends Addon implements Listener {
     }
 
     private void checkChallenges() {
-        if (chatBuffer.isEmpty()) return;  // no new chat
+        if (chatBuffer.isEmpty() || checking)
+            return; // no new chat
+
+        checking = true;
 
         // snapshot current buffer
         List<ChatLine> window = new ArrayList<>(chatBuffer);
@@ -90,16 +101,14 @@ public class GgAddon extends Addon implements Listener {
         // ask ChatGPT
         Map<String, List<String>> results = gpt.evaluateChallenges(payload);
         // results: map<challengeId, list of player names>
-
         ConsoleCommandSender console = getServer().getConsoleSender();
         LocalDate today = LocalDate.now();
-
+        
         results.forEach((id, winners) -> {
             Challenge c = challenges.stream()
-                                    .filter(ch -> ch.getId().equals(id))
-                                    .findFirst().orElse(null);
+                    .filter(ch -> ch.id().equals(id)).findFirst().orElse(null);
             if (c == null) return;
-
+        
             for (String playerName : winners) {
                 UUID uuid = this.getPlayers().getUUID(playerName);
                 if (uuid == null) {
@@ -109,16 +118,16 @@ public class GgAddon extends Addon implements Listener {
                 completedToday.putIfAbsent(uuid, new HashMap<>());
                 Map<String, LocalDate> doneMap = completedToday.get(uuid);
                 if (doneMap.getOrDefault(id, LocalDate.MIN).isEqual(today)) continue;
+        
+                // run reward commands sync
+                Bukkit.getScheduler().runTask(getPlugin(), () ->
+                c.commands().forEach(cmd -> Bukkit.dispatchCommand(console, cmd.replace("%player%", playerName))));
 
-                // run reward commands
-                c.getCommands().forEach(cmd ->
-                    Bukkit.dispatchCommand(console, cmd.replace("%player%", playerName))
-                );
                 doneMap.put(id, today);
             }
         });
-
         // clear buffer so we don't double-count
         chatBuffer.clear();
+        checking = false;
     }
 }
