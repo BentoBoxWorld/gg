@@ -1,68 +1,80 @@
-# gg config file {$version}
-# How often (in seconds) we poll ChatGPT for new challenge completions
+# Gg configuration ${project.version}
+#
+# Gg collects recent chat, asks an LLM which lines satisfy which challenge, and rewards the players who
+# wrote them. Player chat is sent to whichever LLM you configure below, so tell your players.
+
+# Start here: with dry-run on, Gg logs who would be rewarded and why, but gives nothing.
+# Watch the console for a day, tune your challenge prompts, then turn it off.
+dry-run: false
+
+# How often (seconds) to send new chat to the LLM. No request is made if nobody has spoken. Minimum 10.
 poll-interval: 60
 
-# How many of the most recent chat messages to send
+# How many recent lines (chat plus server events) the LLM is shown for context.
 window-size: 100
 
-# Your OpenAI API key
-openai-api-key: your-secret-key-here
+# Chat only counts when at least this many players are online. Talking to yourself earns nothing.
+min-players-online: 2
 
-# Define each challenge:
-#  id: unique string
-#  prompt: the check you want ChatGPT to run on the chat window
-#  commands: list of Bukkit commands to run; use %player% to insert the winner’s name
+# The most rewards one player can earn per day across all challenges. 0 = no cap.
+max-rewards-per-day: 5
+
+# Server events added to the transcript so the LLM can tell what players are reacting to.
+# A "gg" right after someone's advancement means something; a "gg" out of nowhere does not.
+context:
+  joins: true
+  advancements: true
+
+# The language model. Gg speaks the OpenAI-style "chat completions" API, which nearly every hosted
+# provider and local model runner accepts, so pick whichever you like:
+#
+#   base-url: https://api.openai.com/v1          (OpenAI)
+#   base-url: https://openrouter.ai/api/v1       (OpenRouter: one key, many vendors' models)
+#   base-url: https://api.groq.com/openai/v1     (Groq)
+#   base-url: http://localhost:11434/v1          (Ollama on this machine: free, and chat never leaves it)
+#   base-url: http://localhost:1234/v1           (LM Studio on this machine)
+#
+# The job is easy classification, so a small, cheap, fast model is the right choice.
+llm:
+  base-url: ""
+  # The model name exactly as your provider lists it.
+  model: ""
+  # Leave blank for local servers that need no key. You can also leave this blank and set the
+  # GG_API_KEY environment variable instead, which keeps the key out of this file.
+  api-key: ""
+  timeout-seconds: 30
+  # Ask the server to guarantee a JSON reply. Helps weaker models; not every server supports it.
+  json-mode: false
+
+# Challenges.
+#   <id>:
+#     prompt: what qualifies, in plain language. Be specific about who is rewarded and for what.
+#     commands: console commands to run; %player% is the winner's name. The LLM never sees these.
+#     daily-limit: how many times a player can earn this per day (default 1)
 challenges:
-  greet:
-    prompt: "detect when a player sends a greeting in any language"
-    commands:
-      - "give %player% diamond 1"
-      - "msg %player% Thanks for saying hi!"
-  goodbye:
-    prompt: "detect when a player says goodbye in any language"
-    commands:
-      - "give %player% emerald 1"
-      - "msg %player% Thanks for saying goodbye!"
-  help:
-    prompt: "detect when a player asks for help in any language"
-    commands:
-      - "give %player% diamond 1"
-      - "msg %player% Thanks for asking for help!"
-  welcome:
-    prompt: "detect when a player welcomes another player in any language"
-    commands:
-      - "give %player% diamond 1"
-      - "msg %player% Thanks for welcoming others!"
-  congrats:
-    prompt: "detect when a player congratulates another player in any language"
-    commands:
-      - "give %player% diamond 1"
-      - "msg %player% Thanks for congratulating others!"
-  goodluck: 
-    prompt: "detect when a player wishes another player good luck in any language"
-    commands:
-      - "give %player% emerald 1"
-      - "msg %player% Thanks for wishing others good luck!"
   goodgame:
-    prompt: "detect when a player says 'gg' or 'good game' in any language"
+    prompt: "the player congratulates another player (gg, good job, well done, nice, grats...) in response to something that player just did or announced"
+    daily-limit: 2
     commands:
-      - "give %player% oak_sign 1"
-      - "msg %player% Thanks for saying good game!"
-  goodjob:  
-    prompt: "detect when a player says 'good job' in any language"
+      - "give %player% diamond 1"
+      - "msg %player% Thanks for cheering others on!"
+  welcome:
+    prompt: "the player welcomes or greets another player who has just joined the server"
     commands:
-      - "give %player% diampaperond 1"
-      - "msg %player% Thanks for saying good job!"
+      - "give %player% emerald 1"
+      - "msg %player% Thanks for making people feel welcome!"
+  helper:
+    prompt: "the player gives a genuine, useful answer to a question another player asked. Reward the player who answers, not the one who asks"
+    daily-limit: 3
+    commands:
+      - "give %player% diamond 2"
+      - "msg %player% Thanks for helping out!"
   thanks:
-    prompt: "detect when a player says 'thanks' in any language"
+    prompt: "the player thanks another player for help, a gift or a kind word that appears earlier in the chat"
     commands:
-      - "eco give %player% 50"
-  warpinvite:
-    prompt: "detect when a player invites others to warp to their island"
-    commands:
-      - "msg %player% Congrats on inviting others to your island!"
+      - "give %player% emerald 1"
+      - "msg %player% Good manners are always in style!"
   question:
-    prompt: "detect that a player has asked a question to get help from the community"
+    prompt: "the player asks the community a real question about the game or the server"
     commands:
-      - "msg %player% Good job asking the community. If you get an answer, don't forget to say thanks!"
-# …add as many as you like
+      - "msg %player% Good idea asking the community. If someone helps, don't forget to say thanks!"

@@ -1,133 +1,127 @@
 package world.bentobox.gg;
 
+import java.time.Duration;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.bukkit.Bukkit;
-import org.bukkit.command.ConsoleCommandSender;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.player.AsyncPlayerChatEvent;
+import org.bukkit.event.HandlerList;
 import org.bukkit.scheduler.BukkitTask;
 
 import world.bentobox.bentobox.api.addons.Addon;
-import world.bentobox.bentobox.api.user.User;
-import world.bentobox.bentobox.util.Util;
+import world.bentobox.gg.llm.LlmClient;
+import world.bentobox.gg.llm.LlmException;
+import world.bentobox.gg.llm.OpenAiCompatibleClient;
 
-public class GgAddon extends Addon implements Listener {
-    private Deque<ChatLine> chatBuffer;
-    private List<Challenge> challenges;
-    private ChatGPTService gpt;
+/**
+ * Rewards players for positive, helpful chat. Every poll interval the recent chat is sent to an LLM, which
+ * says which lines satisfy which challenges; the winners get the challenge's commands run for them.
+ */
+public class GgAddon extends Addon {
+
+    private Settings settings;
+    private Transcript transcript;
+    private Judge judge;
+    private RewardManager rewards;
+    private ChatListener listener;
     private BukkitTask pollingTask;
-    private Map<UUID, Map<String, LocalDate>> completedToday;
-    private boolean checking;
+    private final AtomicBoolean judging = new AtomicBoolean();
+
+    @Override
+    public void onLoad() {
+        saveDefaultConfig();
+        settings = Settings.from(getConfig());
+    }
 
     @Override
     public void onEnable() {
-        saveDefaultConfig();
-        chatBuffer = new ConcurrentLinkedDeque<>();
-        completedToday = new HashMap<>();
-
-        // Load config
-        int interval = getConfig().getInt("poll-interval", 60);
-        String key  = getConfig().getString("openai-api-key");
-        if (key.equals("your-secret-key-here")) {
-            this.logError("Set the ChatGPT key in config.yml and then restart the server!");
-            this.setState(State.DISABLED);
+        List<String> problems = settings.problems();
+        if (!problems.isEmpty()) {
+            problems.forEach(p -> logError("Gg is disabled: " + p));
+            setState(State.DISABLED);
             return;
         }
-        gpt = new ChatGPTService(this, key);
-
-        // Load challenges
-        challenges = new ArrayList<>();
-        getConfig().getConfigurationSection("challenges").getKeys(false)
-            .forEach(id -> {
-                String prompt = getConfig().getString("challenges." + id + ".prompt");
-                List<String> cmds = getConfig().getStringList("challenges." + id + ".commands");
-                challenges.add(new Challenge(id, prompt, cmds));
-            });
-
-        // Register chat listener
-        this.registerListener(this);
-
-        // Schedule polling task
-        pollingTask = Bukkit.getScheduler().runTaskTimerAsynchronously(
-                getPlugin(),
-            this::checkChallenges,
-            interval * 20L,  // delay
-            interval * 20L   // period
-        );
+        Settings.Llm llm = settings.llm();
+        start(new OpenAiCompatibleClient(llm.baseUrl(), llm.model(), llm.apiKey(),
+                Duration.ofSeconds(llm.timeoutSeconds()), llm.jsonMode()));
+        log("Judging chat every " + settings.pollInterval() + "s with " + llm.model() + " at " + llm.baseUrl()
+                + (settings.dryRun() ? " (dry run: no rewards will be given)" : ""));
     }
 
     @Override
     public void onDisable() {
-        if (pollingTask != null) pollingTask.cancel();
+        stop();
     }
 
-    @EventHandler
-    public void onPlayerChat(AsyncPlayerChatEvent e) {
-        // Check if there are any players online that the player can see
-        User user = User.getInstance(e.getPlayer());
-        if (Util.getOnlinePlayerList(user).isEmpty()) {
+    @Override
+    public void onReload() {
+        stop();
+        reloadConfig();
+        settings = Settings.from(getConfig());
+        onEnable();
+    }
+
+    void start(LlmClient client) {
+        transcript = new Transcript(settings.windowSize());
+        judge = new Judge(transcript, settings.challenges(), client, this::logWarning);
+        rewards = new RewardManager(settings.maxRewardsPerDay(), settings.dryRun(),
+                uuid -> Bukkit.getPlayer(uuid) != null,
+                cmd -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd), this::log, LocalDate::now);
+        listener = new ChatListener(transcript, settings);
+        registerListener(listener);
+        long ticks = settings.pollInterval() * 20L;
+        pollingTask = Bukkit.getScheduler().runTaskTimerAsynchronously(getPlugin(), this::poll, ticks, ticks);
+    }
+
+    private void stop() {
+        if (pollingTask != null) {
+            pollingTask.cancel();
+            pollingTask = null;
+        }
+        if (listener != null) {
+            HandlerList.unregisterAll(listener);
+            listener = null;
+        }
+    }
+
+    /**
+     * Async. The LLM call can take seconds, so it must never run on the main thread; the rewards it leads
+     * to are handed back to the main thread because commands must run there.
+     */
+    void poll() {
+        // A slow reply must not let rounds pile up.
+        if (!judging.compareAndSet(false, true)) {
             return;
         }
-        // keep only last N
-        chatBuffer.addLast(new ChatLine(e.getPlayer().getUniqueId(), e.getPlayer().getName(), e.getMessage()));
-        while (chatBuffer.size() > getConfig().getInt("window-size", 100)) {
-            chatBuffer.pollFirst();
+        try {
+            List<Award> awards = judge.run();
+            if (!awards.isEmpty()) {
+                RewardManager target = rewards;
+                Bukkit.getScheduler().runTask(getPlugin(), () -> target.grant(awards));
+            }
+        } catch (LlmException e) {
+            logWarning(e.getMessage());
+        } catch (RuntimeException e) {
+            logError("Unexpected error while judging chat: " + e);
+        } finally {
+            judging.set(false);
         }
     }
 
-    private void checkChallenges() {
-        if (chatBuffer.isEmpty() || checking)
-            return; // no new chat
+    /**
+     * Tell Gg about something worth reacting to, e.g. "Steve reached island level 100". Other addons and
+     * plugins can call this so that congratulating the player counts. Safe from any thread.
+     *
+     * @param description one line, written as it would be announced in chat
+     */
+    public void recordEvent(String description) {
+        if (transcript != null) {
+            transcript.addEvent(description);
+        }
+    }
 
-        checking = true;
-
-        // snapshot current buffer
-        List<ChatLine> window = new ArrayList<>(chatBuffer);
-
-        // build payload
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("chat", window);
-        payload.put("challenges", challenges);
-
-        // ask ChatGPT
-        Map<String, List<String>> results = gpt.evaluateChallenges(payload);
-        // results: map<challengeId, list of player names>
-        ConsoleCommandSender console = getServer().getConsoleSender();
-        LocalDate today = LocalDate.now();
-        
-        results.forEach((id, winners) -> {
-            Challenge c = challenges.stream()
-                    .filter(ch -> ch.id().equals(id)).findFirst().orElse(null);
-            if (c == null) return;
-        
-            for (String playerName : winners) {
-                UUID uuid = this.getPlayers().getUUID(playerName);
-                if (uuid == null) {
-                    this.logError("Player not found: " + playerName);
-                    continue;
-                }
-                completedToday.putIfAbsent(uuid, new HashMap<>());
-                Map<String, LocalDate> doneMap = completedToday.get(uuid);
-                if (doneMap.getOrDefault(id, LocalDate.MIN).isEqual(today)) continue;
-        
-                // run reward commands sync
-                Bukkit.getScheduler().runTask(getPlugin(), () ->
-                c.commands().forEach(cmd -> Bukkit.dispatchCommand(console, cmd.replace("%player%", playerName))));
-
-                doneMap.put(id, today);
-            }
-        });
-        // clear buffer so we don't double-count
-        chatBuffer.clear();
-        checking = false;
+    public Settings getSettings() {
+        return settings;
     }
 }
