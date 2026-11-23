@@ -2,7 +2,7 @@ name: Gg
 version: ${version}${build.number}
 main: world.bentobox.gg.GgAddon
 icon: GOLD_BLOCK
-api-version: 3.3.3
+api-version: ${bentobox.version}
 
 authors: [tastybento]
-description: Encourages positive chat
+description: Rewards positive, helpful chat
